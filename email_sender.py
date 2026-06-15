@@ -56,16 +56,14 @@ def _build_message(
     to_email: str,
     subject: str,
     pdfs: list[tuple[str, bytes]],
+    body: str,
 ) -> MIMEMultipart:
     msg = MIMEMultipart()
     msg["From"] = settings.gmail_user
     msg["To"] = to_email
     msg["Subject"] = subject
 
-    msg.attach(MIMEText(
-        f"{len(pdfs)} credit note PDF{'s' if len(pdfs) != 1 else ''} attached.",
-        "plain",
-    ))
+    msg.attach(MIMEText(body, "plain"))
 
     for name, data in pdfs:
         part = MIMEApplication(data, _subtype="pdf")
@@ -83,6 +81,7 @@ def send_email_with_pdfs(
     to_email: str,
     subject: str,
     pdfs: list[tuple[str, bytes]],
+    body: str = "Please find the credit note PDFs attached.",
 ) -> int:
     """
     Send credit note PDFs as attachments with proper chunking and timeouts.
@@ -118,7 +117,7 @@ def send_email_with_pdfs(
                 i, total_emails, len(chunk), chunk_mb,
             )
 
-            msg = _build_message(to_email, chunk_subject, chunk)
+            msg = _build_message(to_email, chunk_subject, chunk, body)
             
             # Send the email
             smtp.sendmail(settings.gmail_user, to_email, msg.as_string())

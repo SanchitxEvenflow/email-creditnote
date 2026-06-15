@@ -114,6 +114,27 @@
         />
       </div>
 
+      <!-- Subject & Body section -->
+      <div class="px-6 pt-4 pb-2 flex flex-col gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Subject</label>
+          <input
+            id="subject-input"
+            type="text"
+            value="Credit Notes"
+            class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition text-slate-700"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-1">Email Body</label>
+          <textarea
+            id="body-input"
+            rows="3"
+            class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition text-slate-700 resize-y"
+          >Please find the credit note PDFs attached.</textarea>
+        </div>
+      </div>
+
       <!-- Action buttons -->
       <div class="px-6 pt-3 pb-6 flex gap-3">
 
@@ -308,6 +329,9 @@
       const to_email = document.getElementById('email-input').value.trim();
       if (!numbers.length || !to_email) return;
 
+      const subject = document.getElementById('subject-input').value.trim() || 'Credit Notes';
+      const emailBody = document.getElementById('body-input').value.trim() || 'Please find the credit note PDFs attached.';
+
       setBusy(true, 'email', numbers.length);
       hideResult();
 
@@ -315,7 +339,7 @@
         const resp = await fetch('/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ credit_note_numbers: numbers, to_email }),
+          body: JSON.stringify({ credit_note_numbers: numbers, to_email, subject, body: emailBody }),
         });
 
         if (!resp.ok) {

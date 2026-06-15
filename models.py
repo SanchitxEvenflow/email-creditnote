@@ -10,6 +10,7 @@ class EmailRequest(BaseModel):
     credit_note_numbers: List[str]
     to_email: str
     subject: str = "Credit Notes"
+    body: str = "Please find the credit note PDFs attached."
 
 
 class EmailResponse(BaseModel):

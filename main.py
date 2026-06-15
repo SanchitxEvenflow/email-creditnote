@@ -97,7 +97,7 @@ def send_credit_notes_email(body: EmailRequest) -> EmailResponse:
     if not pdfs:
         raise HTTPException(status_code=502, detail=f"All {len(results)} notes failed to fetch")
 
-    emails_sent = send_email_with_pdfs(body.to_email, body.subject, pdfs)
+    emails_sent = send_email_with_pdfs(body.to_email, body.subject, pdfs, body.body)
 
     logger.info("Email done — %d PDF(s) in %d email(s), %d failed", len(pdfs), emails_sent, len(failed))
     return EmailResponse(to=body.to_email, sent_count=len(pdfs), emails_sent=emails_sent, failed=failed)
