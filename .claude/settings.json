@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /home/sanchit-kulkarni/Evenflow/email-creditnote/start.sh /home/sanchit-kulkarni/Evenflow/email-creditnote/start-dev.sh)"
+    ]
+  }
+}

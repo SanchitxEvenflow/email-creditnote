@@ -1,5 +1,8 @@
+import os
 from typing import Optional
 from pydantic_settings import BaseSettings
+
+_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 
 
 class Settings(BaseSettings):
@@ -10,7 +13,7 @@ class Settings(BaseSettings):
     gmail_user: Optional[str] = None
     gmail_app_password: Optional[str] = None
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": _env_path}
 
 
 settings = Settings()

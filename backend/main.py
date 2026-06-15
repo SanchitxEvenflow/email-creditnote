@@ -1,14 +1,16 @@
 import io
 import logging
+import os
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,12 +25,13 @@ from models import DownloadRequest, EmailRequest, EmailResponse
 from zoho_client import MAX_WORKERS, _fetch_one, token_manager
 
 app = FastAPI(title="Zoho Credit Note Bulk Downloader")
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
-
-@app.get("/")
-def index():
-    return FileResponse("static/index.html")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -101,3 +104,8 @@ def send_credit_notes_email(body: EmailRequest) -> EmailResponse:
 
     logger.info("Email done — %d PDF(s) in %d email(s), %d failed", len(pdfs), emails_sent, len(failed))
     return EmailResponse(to=body.to_email, sent_count=len(pdfs), emails_sent=emails_sent, failed=failed)
+
+
+_frontend_out = os.path.join(os.path.dirname(__file__), "..", "frontend", "out")
+if os.path.isdir(_frontend_out):
+    app.mount("/", StaticFiles(directory=_frontend_out, html=True), name="static")
