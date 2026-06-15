@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zoho Credit Note Downloader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 10px 2px 10px; border-radius: 9999px;
+      background: #EEF2FF; color: #4338CA; font-size: 12px; font-weight: 500;
+      border: 1px solid #C7D2FE;
+    }
+    .chip button {
+      display: flex; align-items: center; justify-content: center;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #C7D2FE; color: #4338CA; font-size: 10px; line-height: 1;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .chip button:hover { background: #A5B4FC; }
+
+    .drop-zone { transition: border-color 0.2s, background 0.2s; }
+    .drop-zone.drag-over { border-color: #6366F1 !important; background: #EEF2FF !important; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid #ffffff55;
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.7s linear infinite; display: inline-block;
+    }
+
+    #toast { transition: opacity 0.3s, transform 0.3s; }
+    #toast.hidden { opacity: 0; pointer-events: none; transform: translateY(8px); }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-start justify-center pt-12 pb-16 px-4">
+
+  <!-- Hidden anchor for programmatic download -->
+  <a id="dl-anchor" class="hidden"></a>
+
+  <!-- Toast notification -->
+  <div id="toast" class="hidden fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium max-w-sm">
+    <span id="toast-icon" class="text-lg"></span>
+    <span id="toast-msg"></span>
+  </div>
+
+  <div class="w-full max-w-2xl">
+
+    <!-- Header -->
+    <div class="mb-8 text-center">
+      <div class="inline-flex items-center gap-2 bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full mb-4 uppercase tracking-wide">
+        Zoho Books · India DC
+      </div>
+      <h1 class="text-3xl font-bold text-slate-800">Credit Note Downloader</h1>
+      <p class="mt-2 text-slate-500 text-sm">Paste credit note numbers to download as ZIP or send as individual PDF attachments.</p>
+    </div>
+
+    <!-- Main card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+
+      <!-- Credit note input section -->
+      <div class="p-6 border-b border-slate-100">
+        <label class="block text-sm font-semibold text-slate-700 mb-2">
+          Credit Note Numbers
+          <span class="ml-1 font-normal text-slate-400">(one per line, or comma-separated)</span>
+        </label>
+
+        <!-- Drop zone wrapper -->
+        <div id="drop-zone"
+             class="drop-zone rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 transition-all"
+             ondragover="handleDragOver(event)"
+             ondragleave="handleDragLeave(event)"
+             ondrop="handleDrop(event)">
+          <textarea
+            id="input-area"
+            rows="8"
+            placeholder="RTVCN2627/0432&#10;RTVCN2627/0433&#10;RTVCN2627/0434&#10;...or paste a comma-separated list"
+            class="w-full bg-transparent px-4 py-3 text-sm text-slate-700 placeholder-slate-400 resize-none outline-none font-mono"
+            oninput="parseInput()"
+          ></textarea>
+          <div class="flex items-center justify-between px-4 py-2 border-t border-dashed border-slate-200 text-xs text-slate-400">
+            <span>Drag &amp; drop a <code>.txt</code> file here</span>
+            <button onclick="clearAll()" class="text-slate-400 hover:text-red-400 transition-colors">Clear all</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chips section -->
+      <div id="chips-section" class="hidden px-6 py-4 border-b border-slate-100 bg-slate-50">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Parsed</span>
+          <span id="counter" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">0</span>
+        </div>
+        <div id="chips-container" class="flex flex-wrap gap-2"></div>
+        <p id="limit-warn" class="hidden mt-2 text-xs text-red-500 font-medium">Maximum 500 credit notes allowed.</p>
+      </div>
+
+      <!-- Email input section -->
+      <div class="px-6 pt-5 pb-2">
+        <label class="block text-sm font-semibold text-slate-700 mb-2">
+          Send to Email
+          <span class="ml-1 font-normal text-slate-400">(required for Send Email)</span>
+        </label>
+        <input
+          id="email-input"
+          type="email"
+          placeholder="recipient@example.com"
+          oninput="updateButtons()"
+          class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition text-slate-700 placeholder-slate-400"
+        />
+      </div>
+
+      <!-- Action buttons -->
+      <div class="px-6 pt-3 pb-6 flex gap-3">
+
+        <!-- Download ZIP -->
+        <button
+          id="download-btn"
+          onclick="triggerDownload()"
+          disabled
+          class="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-colors text-sm"
+        >
+          <svg id="dl-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+          </svg>
+          <span id="dl-label">Download ZIP</span>
+        </button>
+
+        <!-- Send Email -->
+        <button
+          id="email-btn"
+          onclick="triggerSendEmail()"
+          disabled
+          class="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-colors text-sm"
+        >
+          <svg id="em-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <span id="em-label">Send Email</span>
+        </button>
+
+      </div>
+
+      <!-- Progress bar -->
+      <div id="progress-wrap" class="hidden px-6 pb-4">
+        <div class="flex items-center gap-2 text-sm text-slate-500 mb-2">
+          <div class="spinner !border-slate-300 ![border-top-color:#6366f1]"></div>
+          <span id="progress-msg">Contacting Zoho API…</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+          <div id="progress-bar" class="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <p class="text-xs text-slate-400 mt-1">This may take 10–40 seconds depending on batch size.</p>
+      </div>
+
+      <!-- Result banner -->
+      <div id="result-banner" class="hidden mx-6 mb-6 flex items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium">
+        <span id="result-icon" class="text-lg mt-0.5"></span>
+        <span id="result-msg"></span>
+      </div>
+
+    </div>
+
+    <!-- Footer note -->
+    <p class="mt-6 text-center text-xs text-slate-400">
+      Tokens are refreshed automatically. Failed notes appear as <code>_ERROR.txt</code> in the ZIP.
+    </p>
+  </div>
+
+  <script>
+    let parsedNumbers = [];
+
+    // ── Parsing ──────────────────────────────────────────────────────────────
+
+    function parseInput() {
+      const raw = document.getElementById('input-area').value;
+      const parts = raw
+        .split(/[\n,;]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      parsedNumbers = [...new Map(parts.map(s => [s.toUpperCase(), s])).values()];
+      renderChips();
+      updateButtons();
+    }
+
+    function renderChips() {
+      const section   = document.getElementById('chips-section');
+      const container = document.getElementById('chips-container');
+      const counter   = document.getElementById('counter');
+      const warn      = document.getElementById('limit-warn');
+
+      if (parsedNumbers.length === 0) { section.classList.add('hidden'); return; }
+      section.classList.remove('hidden');
+      counter.textContent = `${parsedNumbers.length}`;
+      warn.classList.toggle('hidden', parsedNumbers.length <= 500);
+
+      container.innerHTML = '';
+      parsedNumbers.slice(0, 500).forEach((num, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.innerHTML = `${escHtml(num)}<button onclick="removeChip(${idx})" title="Remove">×</button>`;
+        container.appendChild(chip);
+      });
+      if (parsedNumbers.length > 500) {
+        const extra = document.createElement('span');
+        extra.className = 'text-xs text-red-400 font-medium self-center';
+        extra.textContent = `+${parsedNumbers.length - 500} ignored`;
+        container.appendChild(extra);
+      }
+    }
+
+    function removeChip(idx) {
+      parsedNumbers.splice(idx, 1);
+      document.getElementById('input-area').value = parsedNumbers.join('\n');
+      renderChips();
+      updateButtons();
+    }
+
+    function clearAll() {
+      document.getElementById('input-area').value = '';
+      document.getElementById('email-input').value = '';
+      parsedNumbers = [];
+      renderChips();
+      updateButtons();
+      hideResult();
+    }
+
+    function updateButtons() {
+      const hasNotes = parsedNumbers.length > 0 && parsedNumbers.length <= 500;
+      const email    = document.getElementById('email-input').value.trim();
+      const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+      document.getElementById('download-btn').disabled = !hasNotes;
+      document.getElementById('email-btn').disabled    = !(hasNotes && hasEmail);
+    }
+
+    // ── Drag & Drop ───────────────────────────────────────────────────────────
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      document.getElementById('drop-zone').classList.add('drag-over');
+    }
+    function handleDragLeave(e) {
+      document.getElementById('drop-zone').classList.remove('drag-over');
+    }
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('drop-zone').classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        document.getElementById('input-area').value = ev.target.result;
+        parseInput();
+      };
+      reader.readAsText(file);
+    }
+
+    // ── Download ZIP ──────────────────────────────────────────────────────────
+
+    async function triggerDownload() {
+      const numbers = parsedNumbers.slice(0, 500);
+      if (!numbers.length) return;
+
+      setBusy(true, 'download', numbers.length);
+      hideResult();
+
+      try {
+        const resp = await fetch('/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credit_note_numbers: numbers }),
+        });
+
+        if (!resp.ok) {
+          let detail = `Server error ${resp.status}`;
+          try { detail = (await resp.json()).detail || detail; } catch {}
+          throw new Error(detail);
+        }
+
+        const blob   = await resp.blob();
+        const url    = URL.createObjectURL(blob);
+        const anchor = document.getElementById('dl-anchor');
+        anchor.href  = url;
+        anchor.download = 'credit_notes.zip';
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+        showResult('success', `Download started — credit_notes.zip (${numbers.length} note${numbers.length > 1 ? 's' : ''})`);
+        showToast('success', 'ZIP downloaded!');
+
+      } catch (err) {
+        showResult('error', err.message || 'Unexpected error.');
+        showToast('error', err.message || 'Download failed');
+      } finally {
+        setBusy(false, 'download', 0);
+      }
+    }
+
+    // ── Send Email ────────────────────────────────────────────────────────────
+
+    async function triggerSendEmail() {
+      const numbers  = parsedNumbers.slice(0, 500);
+      const to_email = document.getElementById('email-input').value.trim();
+      if (!numbers.length || !to_email) return;
+
+      setBusy(true, 'email', numbers.length);
+      hideResult();
+
+      try {
+        const resp = await fetch('/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credit_note_numbers: numbers, to_email }),
+        });
+
+        if (!resp.ok) {
+          let detail = `Server error ${resp.status}`;
+          try { detail = (await resp.json()).detail || detail; } catch {}
+          throw new Error(detail);
+        }
+
+        const data = await resp.json();
+        const failNote = data.failed?.length
+          ? ` · ${data.failed.length} failed`
+          : '';
+        const emailNote = data.emails_sent > 1
+          ? ` in ${data.emails_sent} emails (split by size)`
+          : '';
+        showResult('success', `Sent ${data.sent_count} PDF${data.sent_count > 1 ? 's' : ''} to ${data.to}${emailNote}${failNote}`);
+        showToast('success', `Email sent to ${data.to}!`);
+
+      } catch (err) {
+        showResult('error', err.message || 'Unexpected error.');
+        showToast('error', err.message || 'Email failed');
+      } finally {
+        setBusy(false, 'email', 0);
+      }
+    }
+
+    // ── Loading state (shared) ────────────────────────────────────────────────
+
+    let _progressTimer;
+
+    function setBusy(busy, mode, count) {
+      const dlBtn  = document.getElementById('download-btn');
+      const emBtn  = document.getElementById('email-btn');
+      const dlIcon = document.getElementById('dl-icon');
+      const emIcon = document.getElementById('em-icon');
+      const dlLbl  = document.getElementById('dl-label');
+      const emLbl  = document.getElementById('em-label');
+      const wrap   = document.getElementById('progress-wrap');
+      const bar    = document.getElementById('progress-bar');
+      const msg    = document.getElementById('progress-msg');
+
+      if (busy) {
+        dlBtn.disabled = true;
+        emBtn.disabled = true;
+
+        if (mode === 'download') {
+          dlIcon.outerHTML = `<div class="spinner shrink-0" id="dl-icon"></div>`;
+          dlLbl.textContent = `Fetching ${count}…`;
+          msg.textContent = 'Resolving IDs and downloading PDFs…';
+        } else {
+          emIcon.outerHTML = `<div class="spinner shrink-0" id="em-icon"></div>`;
+          emLbl.textContent = `Sending ${count}…`;
+          msg.textContent = 'Fetching PDFs and sending email…';
+        }
+
+        bar.style.width = '0%';
+        wrap.classList.remove('hidden');
+        clearInterval(_progressTimer);
+        let w = 0;
+        _progressTimer = setInterval(() => {
+          w = Math.min(w + Math.random() * 3, 85);
+          bar.style.width = w + '%';
+        }, 600);
+
+      } else {
+        clearInterval(_progressTimer);
+        bar.style.width = '100%';
+        setTimeout(() => { wrap.classList.add('hidden'); bar.style.width = '0%'; }, 500);
+
+        // Restore download button icon
+        const dlIconEl = document.getElementById('dl-icon');
+        if (dlIconEl && dlIconEl.classList.contains('spinner')) {
+          dlIconEl.outerHTML = `<svg id="dl-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>`;
+        }
+        dlLbl.textContent = 'Download ZIP';
+
+        // Restore email button icon
+        const emIconEl = document.getElementById('em-icon');
+        if (emIconEl && emIconEl.classList.contains('spinner')) {
+          emIconEl.outerHTML = `<svg id="em-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>`;
+        }
+        emLbl.textContent = 'Send Email';
+
+        updateButtons();
+      }
+    }
+
+    // ── Result / Toast ────────────────────────────────────────────────────────
+
+    function showResult(type, msg) {
+      const banner = document.getElementById('result-banner');
+      const icon   = document.getElementById('result-icon');
+      const text   = document.getElementById('result-msg');
+      banner.classList.remove('hidden', 'bg-green-50', 'text-green-700', 'bg-red-50', 'text-red-700');
+      if (type === 'success') {
+        banner.classList.add('bg-green-50', 'text-green-700');
+        icon.textContent = '✓';
+      } else {
+        banner.classList.add('bg-red-50', 'text-red-700');
+        icon.textContent = '✕';
+      }
+      text.textContent = msg;
+      banner.classList.remove('hidden');
+    }
+
+    function hideResult() {
+      document.getElementById('result-banner').classList.add('hidden');
+    }
+
+    let _toastTimer;
+    function showToast(type, msg) {
+      const toast = document.getElementById('toast');
+      const icon  = document.getElementById('toast-icon');
+      const text  = document.getElementById('toast-msg');
+      toast.classList.remove('hidden', 'bg-green-600', 'text-white', 'bg-red-600');
+      if (type === 'success') {
+        toast.classList.add('bg-green-600', 'text-white');
+        icon.textContent = '✓';
+      } else {
+        toast.classList.add('bg-red-600', 'text-white');
+        icon.textContent = '✕';
+      }
+      text.textContent = msg;
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => toast.classList.add('hidden'), 4000);
+    }
+
+    function escHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  </script>
+</body>
+</html>

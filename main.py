@@ -1,0 +1,103 @@
+import io
+import logging
+import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
+load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("main")
+
+from config import settings
+from email_sender import send_email_with_pdfs
+from models import DownloadRequest, EmailRequest, EmailResponse
+from zoho_client import MAX_WORKERS, _fetch_one, token_manager
+
+app = FastAPI(title="Zoho Credit Note Bulk Downloader")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+def index():
+    return FileResponse("static/index.html")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "token_ready": token_manager.get_token() is not None}
+
+
+@app.post("/download")
+def download_credit_notes(body: DownloadRequest) -> StreamingResponse:
+    if not body.credit_note_numbers:
+        raise HTTPException(status_code=400, detail="credit_note_numbers list is empty")
+
+    logger.info("Download request — %d credit note(s)", len(body.credit_note_numbers))
+
+    results: list[tuple[str, bytes | None, str | None]] = []
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(_fetch_one, n): n for n in body.credit_note_numbers}
+        for future in as_completed(futures):
+            results.append(future.result())
+
+    ok = sum(1 for _, b, _ in results if b is not None)
+    errors = len(results) - ok
+    logger.info("ZIP ready — %d PDF(s) OK, %d error(s)", ok, errors)
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for number, pdf_bytes, error in results:
+            safe_name = number.replace("/", "_").replace("\\", "_")
+            if pdf_bytes is not None:
+                zf.writestr(f"{safe_name}.pdf", pdf_bytes)
+            else:
+                zf.writestr(f"{safe_name}_ERROR.txt", error or "unknown error")
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=credit_notes.zip"},
+    )
+
+
+@app.post("/send-email", response_model=EmailResponse)
+def send_credit_notes_email(body: EmailRequest) -> EmailResponse:
+    if not body.credit_note_numbers:
+        raise HTTPException(status_code=400, detail="credit_note_numbers list is empty")
+    if not settings.gmail_user or not settings.gmail_app_password:
+        raise HTTPException(status_code=503, detail="GMAIL_USER / GMAIL_APP_PASSWORD not configured in .env")
+
+    logger.info("Email request — %d note(s) → %s", len(body.credit_note_numbers), body.to_email)
+
+    results: list[tuple[str, bytes | None, str | None]] = []
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(_fetch_one, n): n for n in body.credit_note_numbers}
+        for future in as_completed(futures):
+            results.append(future.result())
+
+    pdfs = [
+        (n.replace("/", "_").replace("\\", "_"), b)
+        for n, b, e in results if b is not None
+    ]
+    failed = [
+        {"number": n, "error": e}
+        for n, b, e in results if b is None
+    ]
+
+    if not pdfs:
+        raise HTTPException(status_code=502, detail=f"All {len(results)} notes failed to fetch")
+
+    emails_sent = send_email_with_pdfs(body.to_email, body.subject, pdfs)
+
+    logger.info("Email done — %d PDF(s) in %d email(s), %d failed", len(pdfs), emails_sent, len(failed))
+    return EmailResponse(to=body.to_email, sent_count=len(pdfs), emails_sent=emails_sent, failed=failed)
