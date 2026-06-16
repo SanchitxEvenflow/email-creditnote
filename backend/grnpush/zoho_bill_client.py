@@ -165,6 +165,14 @@ class ZohoBillClient:
         self._item_cache[sku] = meta
         return meta
 
+    def bill_exists(self, bill_number: str) -> bool:
+        resp = self._get(
+            f"{ZOHO_API_BASE}/bills",
+            params={"organization_id": settings.org_id, "bill_number": bill_number},
+        )
+        bills = resp.json().get("bills", []) if resp.ok else []
+        return any(b.get("bill_number") == bill_number for b in bills)
+
     def create_draft_bill(self, payload: dict) -> dict:
         grn_code = payload.get("bill_number", "?")
         logger.info("Creating draft bill for GRN %s", grn_code)

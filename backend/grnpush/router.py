@@ -121,6 +121,9 @@ def create_bills(body: CreateBillsRequest) -> CreateBillsResponse:
             continue
 
         try:
+            if zoho_bill.bill_exists(group.bill_number):
+                raise ValueError(f"Bill {group.bill_number!r} already exists in Zoho")
+
             vendor_id = zoho_bill.find_vendor_id(group.vendor_code, group.vendor_name)
             if not vendor_id:
                 raise ValueError(f"Zoho vendor not found: {group.vendor_code!r}")
