@@ -34,7 +34,7 @@ app = FastAPI(title="Zoho Credit Note Bulk Downloader")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "https://evenflowbrands-finance.onrender.com"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
