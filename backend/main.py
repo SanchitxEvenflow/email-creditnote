@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import sys
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -12,6 +13,10 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+# email/ subfolder can't be a package (conflicts with stdlib email module),
+# so we add it to sys.path to import email_sender directly from there.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "email"))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
@@ -21,6 +26,7 @@ logger = logging.getLogger("main")
 
 from config import settings
 from email_sender import send_email_with_pdfs
+from grnpush.router import router as grn_router
 from models import DownloadRequest, EmailRequest, EmailResponse
 from zoho_client import MAX_WORKERS, _fetch_one, token_manager
 
@@ -32,6 +38,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(grn_router)
 
 
 @app.get("/health")

@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     gmail_user: Optional[str] = None
     gmail_app_password: Optional[str] = None
 
+    unicommerce_username: Optional[str] = None
+    unicommerce_password: Optional[str] = None
+    unicommerce_base_url: str = "https://evenflow.unicommerce.com"
+    unicommerce_client_id: str = "my-trusted-client"
+
     model_config = {"env_file": _env_path}
 
 

@@ -5,7 +5,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from backend.email.config import settings
+from config import settings
 
 logger = logging.getLogger("email")
 
