@@ -13,9 +13,9 @@ export default function Sidebar() {
   ];
 
   return (
-    <div className="w-64 bg-slate-900 min-h-screen flex flex-col fixed left-0 top-0 text-slate-300 shadow-xl z-50">
-      <div className="p-6 flex items-center justify-center border-b border-white/5">
-        <Image src="/logo.png" className="h-12 w-auto object-contain" alt="Evenflow logo" width={160} height={64} priority />
+    <div className="w-64 bg-black min-h-screen flex flex-col fixed left-0 top-0 text-slate-300 shadow-xl z-50">
+      <div className="p-6 pt-8 pb-6 flex items-center justify-center border-b border-white/10">
+        <Image src="/logo.png" className="h-20 w-auto object-contain" alt="Evenflow logo" width={240} height={96} priority />
       </div>
       <div className="flex-1 py-8 px-4 flex flex-col gap-2">
         <div className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Tools</div>
