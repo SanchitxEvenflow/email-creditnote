@@ -34,7 +34,12 @@ app = FastAPI(title="Zoho Credit Note Bulk Downloader")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://evenflowbrands-finance.onrender.com"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "https://evenflowbrands-finance.onrender.com",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -85,8 +90,8 @@ def download_credit_notes(body: DownloadRequest) -> StreamingResponse:
 def send_credit_notes_email(body: EmailRequest) -> EmailResponse:
     if not body.credit_note_numbers:
         raise HTTPException(status_code=400, detail="credit_note_numbers list is empty")
-    if not settings.gmail_user or not settings.gmail_app_password:
-        raise HTTPException(status_code=503, detail="GMAIL_USER / GMAIL_APP_PASSWORD not configured in .env")
+    if not settings.resend_api_key or not settings.resend_from_email:
+        raise HTTPException(status_code=503, detail="RESEND_API_KEY / RESEND_FROM_EMAIL not configured in .env")
 
     logger.info("Email request — %d note(s) → %s", len(body.credit_note_numbers), body.to_email)
 

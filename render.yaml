@@ -13,7 +13,7 @@ services:
         sync: false
       - key: ORG_ID
         sync: false
-      - key: GMAIL_USER
+      - key: RESEND_API_KEY
         sync: false
-      - key: GMAIL_APP_PASSWORD
+      - key: RESEND_FROM_EMAIL
         sync: false

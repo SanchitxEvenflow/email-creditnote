@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     org_id: str
     gmail_user: Optional[str] = None
     gmail_app_password: Optional[str] = None
+    resend_api_key: Optional[str] = None
+    resend_from_email: Optional[str] = None
 
     unicommerce_username: Optional[str] = None
     unicommerce_password: Optional[str] = None

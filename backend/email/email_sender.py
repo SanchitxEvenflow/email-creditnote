@@ -1,132 +1,81 @@
 import logging
-import smtplib
-import time
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+
+import resend
 
 from config import settings
 
 logger = logging.getLogger("email")
 
-SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 465
-
-# Increased to 18 MB raw as requested
-# (≈24 MB after base64 encoding — safely under Gmail's 25 MB limit)
-MAX_ATTACHMENT_RAW_BYTES = 18 * 1024 * 1024
+# Resend attachment limit is 40 MB total; keep each email under 35 MB raw
+MAX_ATTACHMENT_RAW_BYTES = 35 * 1024 * 1024
 
 
 def _chunk_by_size(
     pdfs: list[tuple[str, bytes]],
-    max_bytes: int = MAX_ATTACHMENT_RAW_BYTES,
+    max_bytes: int,
 ) -> list[list[tuple[str, bytes]]]:
-    """Split PDFs into chunks so total raw size stays under max_bytes."""
     chunks: list[list[tuple[str, bytes]]] = []
     current: list[tuple[str, bytes]] = []
     current_size = 0
 
     for name, data in pdfs:
-        data_size = len(data)
-        
-        # If a single PDF is bigger than limit, send it alone
-        if data_size > max_bytes:
+        size = len(data)
+        if size > max_bytes:
             if current:
                 chunks.append(current)
+                current = []
+                current_size = 0
             chunks.append([(name, data)])
+            continue
+        if current_size + size > max_bytes:
+            chunks.append(current)
             current = []
             current_size = 0
-            continue
-
-        if current and current_size + data_size > max_bytes:
-            chunks.append(current)
-            current = [(name, data)]
-            current_size = data_size
-        else:
-            current.append((name, data))
-            current_size += data_size
+        current.append((name, data))
+        current_size += size
 
     if current:
         chunks.append(current)
-
     return chunks
-
-
-def _build_message(
-    to_email: str,
-    subject: str,
-    pdfs: list[tuple[str, bytes]],
-    body: str,
-) -> MIMEMultipart:
-    msg = MIMEMultipart()
-    msg["From"] = settings.gmail_user
-    msg["To"] = to_email
-    msg["Subject"] = subject
-
-    msg.attach(MIMEText(body, "plain"))
-
-    for name, data in pdfs:
-        part = MIMEApplication(data, _subtype="pdf")
-        part.add_header(
-            "Content-Disposition", 
-            "attachment", 
-            filename=f"{name}.pdf"
-        )
-        msg.attach(part)
-
-    return msg
 
 
 def send_email_with_pdfs(
     to_email: str,
     subject: str,
     pdfs: list[tuple[str, bytes]],
-    body: str = "Please find the credit note PDFs attached.",
+    body: str,
 ) -> int:
-    """
-    Send credit note PDFs as attachments with proper chunking and timeouts.
-    Returns the number of emails sent.
-    """
     if not pdfs:
         logger.info("No PDFs to send")
         return 0
 
-    chunks = _chunk_by_size(pdfs)
-    total_emails = len(chunks)
-    total_mb = sum(len(data) for _, data in pdfs) / (1024 * 1024)
+    resend.api_key = settings.resend_api_key
+    from_address = settings.resend_from_email
 
-    logger.info(
-        "Sending %d PDF(s) (%.1f MB raw) in %d email(s) to %s",
-        len(pdfs), total_mb, total_emails, to_email,
-    )
+    chunks = _chunk_by_size(pdfs, MAX_ATTACHMENT_RAW_BYTES)
+    emails_sent = 0
 
-    # High timeout because Gmail can be slow with many attachments
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=240) as smtp:
-        logger.info("SMTP login as %s", settings.gmail_user)
-        smtp.login(settings.gmail_user, settings.gmail_app_password)
+    for i, chunk in enumerate(chunks):
+        chunk_subject = f"{subject} ({i + 1}/{len(chunks)})" if len(chunks) > 1 else subject
 
-        for i, chunk in enumerate(chunks, start=1):
-            chunk_mb = sum(len(data) for _, data in chunk) / (1024 * 1024)
-            chunk_subject = (
-                subject if total_emails == 1 
-                else f"{subject} (Part {i} of {total_emails})"
-            )
+        attachments: list[resend.Attachment] = [
+            {"filename": f"{name}.pdf", "content": list(data)}
+            for name, data in chunk
+        ]
 
-            logger.info(
-                "  Sending email %d/%d — %d attachment(s), %.1f MB",
-                i, total_emails, len(chunk), chunk_mb,
-            )
+        params: resend.Emails.SendParams = {
+            "from": from_address,
+            "to": [to_email],
+            "subject": chunk_subject,
+            "text": body,
+            "attachments": attachments,
+        }
 
-            msg = _build_message(to_email, chunk_subject, chunk, body)
-            
-            # Send the email
-            smtp.sendmail(settings.gmail_user, to_email, msg.as_string())
-            
-            logger.info("  Email %d/%d sent successfully", i, total_emails)
+        try:
+            resend.Emails.send(params)
+            emails_sent += 1
+            logger.info("Sent email %d/%d with %d PDF(s)", i + 1, len(chunks), len(chunk))
+        except Exception:
+            logger.exception("Failed to send email %d/%d", i + 1, len(chunks))
 
-            # Small delay between emails to reduce Gmail pressure
-            if i < total_emails:
-                time.sleep(4)
-
-    logger.info("All %d email(s) delivered successfully to %s", total_emails, to_email)
-    return total_emails
+    return emails_sent

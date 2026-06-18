@@ -224,3 +224,6 @@ frontend/node_modules/
 # Backend venv
 backend/venv/
 backend/__pycache__/
+
+
+.serena 
