@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     unicommerce_base_url: str = "https://evenflow.unicommerce.com"
     unicommerce_client_id: str = "my-trusted-client"
 
+    gmail_client_id: Optional[str] = None
+    gmail_client_secret: Optional[str] = None
+    gmail_refresh_token: Optional[str] = None
+
     model_config = {"env_file": _env_path}
 
 

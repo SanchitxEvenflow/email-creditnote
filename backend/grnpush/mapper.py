@@ -9,6 +9,12 @@ from pydantic import BaseModel
 logger = logging.getLogger("mapper")
 
 
+class GmailAttachmentRef(BaseModel):
+    message_id: str
+    attachment_id: str
+    filename: str
+
+
 class BillGroup(BaseModel):
     bill_number: str        # vendorInvoiceNumber → Zoho Bill#
     po_code: str            # purchaseOrder.code → reference_number / cf_order_number
@@ -20,6 +26,7 @@ class BillGroup(BaseModel):
     invoice_date: Optional[str] = None  # vendorInvoiceDate
     line_items: list[dict]
     notes: str
+    grn_gmail_attachments: dict[str, GmailAttachmentRef] = {}  # grn_code → attachment ref
 
 
 def _epoch_ms_to_date(ms) -> str | None:

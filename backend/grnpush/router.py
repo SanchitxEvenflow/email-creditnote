@@ -2,9 +2,11 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from config import settings
+from grnpush.gmail_pdf import download_attachment, fetch_grn_pdfs
 from grnpush.mapper import BillGroup, build_bill_payload, group_grns
 from grnpush.unicommerce_client import unicommerce
 from grnpush.zoho_bill_client import zoho_bill
@@ -98,6 +100,16 @@ def fetch_details(body: FetchDetailsRequest) -> FetchDetailsResponse:
             logger.error("Failed to fetch GRN %s: %s", item.grn_code, exc)
 
     bills = group_grns(grns)
+
+    all_grn_codes = [item.grn_code for item in body.receipts]
+    gmail_refs = fetch_grn_pdfs(all_grn_codes)
+    for bill in bills:
+        bill.grn_gmail_attachments = {
+            code: gmail_refs[code]
+            for code in bill.grn_codes
+            if code in gmail_refs
+        }
+
     logger.info("Grouped %d GRN(s) into %d bill(s)", len(grns), len(bills))
     return FetchDetailsResponse(bills=bills)
 
@@ -133,7 +145,17 @@ def create_bills(body: CreateBillsRequest) -> CreateBillsResponse:
             item_meta_map = {sku: zoho_bill.find_item_metadata(sku) for sku in skus}
             payload = build_bill_payload(group, vendor_id, item_meta_map, is_interstate)
             bill = zoho_bill.create_draft_bill(payload)
-            results.append(BillResult(bill_number=group.bill_number, status="ok", bill_id=bill["bill_id"]))
+            bill_id = bill["bill_id"]
+
+            for grn_code, ref in group.grn_gmail_attachments.items():
+                try:
+                    pdf_bytes = download_attachment(ref.message_id, ref.attachment_id)
+                    zoho_bill.attach_pdf(bill_id, ref.filename, pdf_bytes)
+                    logger.info("Attached PDF %s to bill %s", ref.filename, bill_id)
+                except Exception as attach_exc:
+                    logger.warning("PDF attach failed for %s: %s", grn_code, attach_exc)
+
+            results.append(BillResult(bill_number=group.bill_number, status="ok", bill_id=bill_id))
         except Exception as exc:
             logger.error("Bill %s failed: %s", group.bill_number, exc)
             results.append(BillResult(bill_number=group.bill_number, status="error", error=str(exc)))
@@ -141,6 +163,20 @@ def create_bills(body: CreateBillsRequest) -> CreateBillsResponse:
     ok = sum(1 for r in results if r.status == "ok")
     skipped = sum(1 for r in results if r.status == "skipped")
     return CreateBillsResponse(total=len(results), ok=ok, failed=len(results) - ok - skipped, results=results)
+
+
+@router.get("/fetch-pdf/{grn_code}", summary="Fetch vendor invoice PDF from Gmail for a GRN code")
+def fetch_pdf(grn_code: str) -> StreamingResponse:
+    refs = fetch_grn_pdfs([grn_code])
+    if grn_code not in refs:
+        raise HTTPException(status_code=404, detail=f"No email with PDF found for GRN {grn_code!r}")
+    ref = refs[grn_code]
+    pdf_bytes = download_attachment(ref.message_id, ref.attachment_id)
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{ref.filename}"'},
+    )
 
 
 def _check_unicommerce_config() -> None:

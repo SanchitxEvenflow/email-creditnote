@@ -188,5 +188,29 @@ class ZohoBillClient:
         logger.info("Draft bill created: %s → bill_id=%s", grn_code, bill_id)
         return data["bill"]
 
+    def attach_pdf(self, bill_id: str, filename: str, pdf_bytes: bytes) -> None:
+        for attempt in range(MAX_RETRIES):
+            headers = {"Authorization": f"Zoho-oauthtoken {token_manager.get_token()}"}
+            resp = self._session.post(
+                f"{ZOHO_API_BASE}/bills/{bill_id}/documents",
+                params={"organization_id": settings.org_id},
+                headers=headers,
+                files={"attachment": (filename, pdf_bytes, "application/pdf")},
+                timeout=60,
+            )
+            if resp.status_code == 401:
+                token_manager.force_refresh()
+                continue
+            if resp.status_code == 429:
+                wait = min(BACKOFF_BASE * (2 ** attempt), MAX_WAIT_SECS)
+                logger.warning("429 attaching PDF, waiting %ss", wait)
+                time.sleep(wait)
+                continue
+            if not resp.ok:
+                raise RuntimeError(f"Zoho attach_pdf failed [{resp.status_code}]: {resp.text}")
+            logger.info("PDF %s attached to bill %s", filename, bill_id)
+            return
+        raise RuntimeError(f"Zoho attach_pdf exceeded retries for bill {bill_id}")
+
 
 zoho_bill = ZohoBillClient()
