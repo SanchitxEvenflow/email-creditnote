@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 type StepStatus = "IDLE" | "STEP_1_FETCHING" | "STEP_1_DONE" | "STEP_2_FETCHING" | "STEP_2_DONE" | "STEP_3_PUSHING" | "DONE" | "ERROR";
 
