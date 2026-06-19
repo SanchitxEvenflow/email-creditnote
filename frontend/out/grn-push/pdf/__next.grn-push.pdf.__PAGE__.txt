@@ -1,5 +1,9 @@
 1:"$Sreact.fragment"
-2:I[97367,["/_next/static/chunks/18z9rj0pw4mec.js","/_next/static/chunks/14mrh2-p_w84d.js"],"OutletBoundary"]
-3:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"w-full max-w-5xl mx-auto py-8 px-6","children":[["$","div",null,{"className":"mb-8","children":[["$","h1",null,{"className":"text-3xl font-bold text-slate-800 tracking-tight","children":"PDF Upload"}],["$","p",null,{"className":"text-slate-500 mt-2","children":"Upload and manage PDFs"}]]}],["$","div",null,{"className":"bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center text-slate-500","children":"PDF module coming soon."}]]}],null,["$","$L2",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@4"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"C3KKMCDBRfHsWi6wnzCNf"}
-4:null
+2:I[47257,["/_next/static/chunks/18z9rj0pw4mec.js","/_next/static/chunks/14mrh2-p_w84d.js"],"ClientPageRoot"]
+3:I[6134,["/_next/static/chunks/18z9rj0pw4mec.js","/_next/static/chunks/14mrh2-p_w84d.js","/_next/static/chunks/1u7nu3c0cu84_.js"],"default"]
+6:I[97367,["/_next/static/chunks/18z9rj0pw4mec.js","/_next/static/chunks/14mrh2-p_w84d.js"],"OutletBoundary"]
+7:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/1u7nu3c0cu84_.js","async":true}]],["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"4X2RJ3F0MXundCjtWoGGg"}
+4:{}
+5:"$0:rsc:props:children:0:props:serverProvidedParams:params"
+8:null

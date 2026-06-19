@@ -10,7 +10,7 @@ from zoho_client import MAX_RETRIES, BACKOFF_BASE, MAX_WAIT_SECS, ZOHO_API_BASE,
 logger = logging.getLogger("zoho_bill")
 
 _ORG_STATE_CODE = "29"  # Karnataka
-_FUZZY_THRESHOLD = 90
+_FUZZY_THRESHOLD = 80
 
 
 def _word_overlap(a: str, b: str) -> int:
@@ -195,13 +195,58 @@ class ZohoBillClient:
         self._item_cache[sku] = meta
         return meta
 
-    def bill_exists(self, bill_number: str) -> bool:
+    def list_bills(self, date_from: str | None = None, date_to: str | None = None) -> list[dict]:
+        """Return all bills from Zoho with bill_id, bill_number, and cf_grn parsed out."""
+        results = []
+        page = 1
+        while True:
+            params: dict = {"organization_id": settings.org_id, "page": page, "per_page": 200}
+            if date_from:
+                params["date_start"] = date_from
+            if date_to:
+                params["date_end"] = date_to
+            resp = self._get(f"{ZOHO_API_BASE}/bills", params=params)
+            data = resp.json() if resp.ok else {}
+            for bill in data.get("bills", []):
+                cf_grn = ""
+                for cf in bill.get("custom_fields") or []:
+                    if cf.get("api_name") == "cf_grn":
+                        cf_grn = cf.get("value") or ""
+                        break
+                results.append({
+                    "bill_id": bill.get("bill_id", ""),
+                    "bill_number": bill.get("bill_number", ""),
+                    "cf_grn": cf_grn,
+                    "date": bill.get("date", ""),
+                })
+            if not data.get("page_context", {}).get("has_more_page"):
+                break
+            page += 1
+        logger.info("Fetched %d bill(s) from Zoho", len(results))
+        return results
+
+    def find_bill(self, bill_number: str, vendor_id: str | None = None) -> dict | None:
+        """Return {'bill_id': ..., 'date': ...} if the bill exists in Zoho, else None.
+
+        Optionally filters by vendor_id to avoid matching a same-numbered bill from a different vendor.
+        """
         resp = self._get(
             f"{ZOHO_API_BASE}/bills",
             params={"organization_id": settings.org_id, "bill_number": bill_number},
         )
         bills = resp.json().get("bills", []) if resp.ok else []
-        return any(b.get("bill_number") == bill_number for b in bills)
+        match = next(
+            (b for b in bills
+             if b.get("bill_number") == bill_number
+             and (vendor_id is None or b.get("vendor_id") == vendor_id)),
+            None,
+        )
+        if match:
+            return {"bill_id": match["bill_id"], "date": match.get("date", "")}
+        return None
+
+    def bill_exists(self, bill_number: str) -> bool:
+        return self.find_bill(bill_number) is not None
 
     def create_draft_bill(self, payload: dict) -> dict:
         grn_code = payload.get("bill_number", "?")
@@ -218,14 +263,18 @@ class ZohoBillClient:
         logger.info("Draft bill created: %s → bill_id=%s", grn_code, bill_id)
         return data["bill"]
 
-    def attach_pdf(self, bill_id: str, filename: str, pdf_bytes: bytes) -> None:
+    def attach_pdf(self, bill_id: str, files: list[tuple[str, bytes]]) -> None:
+        multipart_files = [
+            ("attachment", (fn, data, "application/pdf"))
+            for fn, data in files
+        ]
         for attempt in range(MAX_RETRIES):
             headers = {"Authorization": f"Zoho-oauthtoken {token_manager.get_token()}"}
             resp = self._session.post(
-                f"{ZOHO_API_BASE}/bills/{bill_id}/documents",
+                f"{ZOHO_API_BASE}/bills/{bill_id}/attachment",
                 params={"organization_id": settings.org_id},
                 headers=headers,
-                files={"attachment": (filename, pdf_bytes, "application/pdf")},
+                files=multipart_files,
                 timeout=60,
             )
             if resp.status_code == 401:
@@ -238,7 +287,8 @@ class ZohoBillClient:
                 continue
             if not resp.ok:
                 raise RuntimeError(f"Zoho attach_pdf failed [{resp.status_code}]: {resp.text}")
-            logger.info("PDF %s attached to bill %s", filename, bill_id)
+            filenames = [fn for fn, _ in files]
+            logger.info("PDFs %s attached to bill %s", filenames, bill_id)
             return
         raise RuntimeError(f"Zoho attach_pdf exceeded retries for bill {bill_id}")
 

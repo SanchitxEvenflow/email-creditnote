@@ -44,7 +44,9 @@ class ZohoTokenManager:
                 },
                 timeout=15,
             )
-            resp.raise_for_status()
+            if not resp.ok:
+                logger.error("Token refresh HTTP %s: %s", resp.status_code, resp.text)
+                resp.raise_for_status()
             data = resp.json()
             if "access_token" not in data:
                 logger.error("Token refresh failed: %s", data)

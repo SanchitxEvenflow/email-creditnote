@@ -19,19 +19,21 @@ class LogEntry(BaseModel):
     created_at: str
 
 
+def _load_raw() -> list[dict]:
+    if not LOG_PATH.exists():
+        return []
+    text = LOG_PATH.read_text().strip()
+    return json.loads(text) if text else []
+
+
 def read_log() -> list[LogEntry]:
     with _lock:
-        if not LOG_PATH.exists():
-            return []
-        data = json.loads(LOG_PATH.read_text())
-        return [LogEntry(**e) for e in data]
+        return [LogEntry(**e) for e in _load_raw()]
 
 
 def append_entries(entries: list[LogEntry]) -> None:
     with _lock:
-        existing: list[dict] = []
-        if LOG_PATH.exists():
-            existing = json.loads(LOG_PATH.read_text())
+        existing: list[dict] = _load_raw()
         existing_codes = {e["grn_code"] for e in existing}
         for entry in entries:
             if entry.grn_code not in existing_codes:
@@ -39,16 +41,21 @@ def append_entries(entries: list[LogEntry]) -> None:
         LOG_PATH.write_text(json.dumps(existing, indent=2))
 
 
-def mark_pdf_attached(grn_code: str) -> bool:
+def mark_pdf_attached(grn_code: str, bill_number: str = "", bill_id: str = "") -> None:
+    """Mark a GRN's PDF as attached. Upserts if the GRN is not yet in the log."""
     with _lock:
-        if not LOG_PATH.exists():
-            return False
-        data = json.loads(LOG_PATH.read_text())
+        data = _load_raw()
         found = False
         for e in data:
             if e["grn_code"] == grn_code:
                 e["pdf_attached"] = True
                 found = True
-        if found:
-            LOG_PATH.write_text(json.dumps(data, indent=2))
-        return found
+        if not found and bill_number:
+            data.append({
+                "grn_code": grn_code,
+                "bill_number": bill_number,
+                "bill_id": bill_id,
+                "pdf_attached": True,
+                "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            })
+        LOG_PATH.write_text(json.dumps(data, indent=2))
