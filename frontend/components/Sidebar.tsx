@@ -9,7 +9,16 @@ export default function Sidebar() {
 
   const links = [
     { name: "Credit Notes", href: "/credit-notes", icon: "📧" },
-    { name: "GRN Push", href: "/grn-push", icon: "📦" },
+    { 
+      name: "GRN Push", 
+      href: "/grn-push", 
+      icon: "📦",
+      subLinks: [
+        { name: "Bills", href: "/grn-push" },
+        { name: "PDF", href: "/grn-push/pdf" },
+        { name: "History", href: "/grn-push/history" },
+      ]
+    },
   ];
 
   return (
@@ -20,20 +29,45 @@ export default function Sidebar() {
       <div className="flex-1 py-8 px-4 flex flex-col gap-2">
         <div className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Tools</div>
         {links.map((link) => {
-          const isActive = pathname.startsWith(link.href);
+          const isParentActive = pathname.startsWith(link.href);
+          const hasSubLinks = link.subLinks && link.subLinks.length > 0;
+
           return (
-            <Link
-              key={link.name}
-              href={link.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                isActive
-                  ? "bg-indigo-500/10 text-indigo-400 font-medium"
-                  : "hover:bg-white/5 hover:text-white font-medium"
-              }`}
-            >
-              <span className="text-xl">{link.icon}</span>
-              <span>{link.name}</span>
-            </Link>
+            <div key={link.name} className="flex flex-col gap-1">
+              <Link
+                href={link.href}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                  isParentActive && !hasSubLinks
+                    ? "bg-indigo-500/10 text-indigo-400 font-medium"
+                    : isParentActive
+                    ? "text-indigo-400 font-medium"
+                    : "hover:bg-white/5 hover:text-white font-medium"
+                }`}
+              >
+                <span className="text-xl">{link.icon}</span>
+                <span>{link.name}</span>
+              </Link>
+              {isParentActive && hasSubLinks && (
+                <div className="flex flex-col gap-1 ml-11 mt-1 border-l border-white/10 pl-3">
+                  {link.subLinks?.map((subLink) => {
+                    const isSubActive = pathname === subLink.href;
+                    return (
+                      <Link
+                        key={subLink.name}
+                        href={subLink.href}
+                        className={`px-3 py-2 text-sm rounded-lg transition-all ${
+                          isSubActive
+                            ? "bg-indigo-500/20 text-indigo-300 font-medium"
+                            : "text-slate-400 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        {subLink.name}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
