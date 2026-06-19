@@ -1,0 +1,51 @@
+[
+  {
+    "grn_code": "G3625",
+    "bill_number": "749",
+    "bill_id": "727927000219187216",
+    "pdf_attached": false,
+    "created_at": "2026-06-18"
+  },
+  {
+    "grn_code": "G2021",
+    "bill_number": "749",
+    "bill_id": "727927000219187216",
+    "pdf_attached": false,
+    "created_at": "2026-06-18"
+  },
+  {
+    "grn_code": "G3626",
+    "bill_number": "VPS/589/2026-27",
+    "bill_id": "727927000219187223",
+    "pdf_attached": false,
+    "created_at": "2026-06-18"
+  },
+  {
+    "grn_code": "G2022",
+    "bill_number": "VPS/589/2026-27",
+    "bill_id": "727927000219187223",
+    "pdf_attached": false,
+    "created_at": "2026-06-18"
+  },
+  {
+    "grn_code": "G3627",
+    "bill_number": "26-27/139",
+    "bill_id": "727927000219187230",
+    "pdf_attached": false,
+    "created_at": "2026-06-18"
+  },
+  {
+    "grn_code": "G3628",
+    "bill_number": "26-27/139",
+    "bill_id": "727927000219187230",
+    "pdf_attached": false,
+    "created_at": "2026-06-18"
+  },
+  {
+    "grn_code": "G3629",
+    "bill_number": "0556",
+    "bill_id": "727927000219187236",
+    "pdf_attached": false,
+    "created_at": "2026-06-18"
+  }
+]

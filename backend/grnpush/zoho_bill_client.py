@@ -2,6 +2,7 @@ import logging
 import time
 
 import requests
+from rapidfuzz import process as fuzz_process, fuzz
 
 from config import settings
 from zoho_client import MAX_RETRIES, BACKOFF_BASE, MAX_WAIT_SECS, ZOHO_API_BASE, token_manager
@@ -9,6 +10,7 @@ from zoho_client import MAX_RETRIES, BACKOFF_BASE, MAX_WAIT_SECS, ZOHO_API_BASE,
 logger = logging.getLogger("zoho_bill")
 
 _ORG_STATE_CODE = "29"  # Karnataka
+_FUZZY_THRESHOLD = 90
 
 
 def _word_overlap(a: str, b: str) -> int:
@@ -22,6 +24,8 @@ class ZohoBillClient:
         self._session = requests.Session()
         self._vendor_cache: dict[str, str] = {}   # name_lower → contact_id
         self._vendor_gst: dict[str, str] = {}     # name_lower → gst_no
+        self._gst_vendor: dict[str, str] = {}     # gst_no → contact_id
+        self._contact_gst: dict[str, str] = {}    # contact_id → gst_no
         self._item_cache: dict[str, dict | None] = {}
 
     def _get(self, url: str, params: dict) -> requests.Response:
@@ -87,30 +91,43 @@ class ZohoBillClient:
             data = resp.json() if resp.ok else {}
             for c in data.get("contacts", []):
                 name_lower = c["contact_name"].lower()
-                self._vendor_cache[name_lower] = c["contact_id"]
-                self._vendor_gst[name_lower] = c.get("gst_no") or ""
+                contact_id = c["contact_id"]
+                gst_no = (c.get("gst_no") or "").strip().upper()
+                self._vendor_cache[name_lower] = contact_id
+                self._vendor_gst[name_lower] = gst_no
+                if gst_no:
+                    self._gst_vendor[gst_no] = contact_id
+                    self._contact_gst[contact_id] = gst_no
             if not data.get("page_context", {}).get("has_more_page"):
                 break
             page += 1
         logger.info("Loaded %d vendors into cache", len(self._vendor_cache))
 
-    def find_vendor_id(self, vendor_code: str, vendor_name: str = "") -> str | None:
+    def find_vendor_id(self, vendor_code: str, vendor_name: str = "", vendor_gst: str = "") -> str | None:
         if not self._vendor_cache:
             self._load_all_vendors()
 
+        # 1. GST match (primary — deterministic, unique)
+        if vendor_gst:
+            gst_key = vendor_gst.strip().upper()
+            vendor_id = self._gst_vendor.get(gst_key)
+            if vendor_id:
+                logger.info("Vendor %r matched by GST %r → %s", vendor_name or vendor_code, gst_key, vendor_id)
+                return vendor_id
+
         key = vendor_name.lower()
 
-        # exact match
+        # 2. exact name match
         vendor_id = self._vendor_cache.get(key)
 
-        # substring match
+        # 3. substring match
         if not vendor_id and vendor_name:
             vendor_id = next(
                 (cid for name, cid in self._vendor_cache.items() if key in name or name in key),
                 None,
             )
 
-        # word-overlap match (handles "PVT.LTD" vs "PRIVATE LIMITED")
+        # 4. word-overlap match (handles "PVT.LTD" vs "PRIVATE LIMITED")
         if not vendor_id and vendor_name:
             best_name = max(
                 self._vendor_cache.keys(),
@@ -121,16 +138,29 @@ class ZohoBillClient:
                 vendor_id = self._vendor_cache[best_name]
                 logger.info("Vendor %r matched by word-overlap → %r", vendor_name, best_name)
 
+        # 5. fuzzy match (rapidfuzz — catches typos / abbreviations)
+        if not vendor_id and vendor_name:
+            result = fuzz_process.extractOne(
+                key,
+                self._vendor_cache.keys(),
+                scorer=fuzz.WRatio,
+                score_cutoff=_FUZZY_THRESHOLD,
+            )
+            if result:
+                best_name, score, _ = result
+                vendor_id = self._vendor_cache[best_name]
+                logger.info("Vendor %r matched by fuzzy (score=%d) → %r", vendor_name, score, best_name)
+
         if vendor_id:
             logger.info("Vendor %r → %s", vendor_name or vendor_code, vendor_id)
         else:
-            logger.warning("Vendor not found in Zoho: code=%r name=%r", vendor_code, vendor_name)
+            logger.warning("Vendor not found in Zoho: code=%r name=%r gst=%r", vendor_code, vendor_name, vendor_gst)
         return vendor_id
 
-    def is_interstate_vendor(self, vendor_name: str) -> bool:
+    def is_interstate_vendor(self, vendor_id: str) -> bool:
         if not self._vendor_cache:
             self._load_all_vendors()
-        gst = self._vendor_gst.get(vendor_name.lower(), "")
+        gst = self._contact_gst.get(vendor_id, "")
         if not gst:
             return True  # no GST on file → assume interstate (safer default)
         return not gst.startswith(_ORG_STATE_CODE)

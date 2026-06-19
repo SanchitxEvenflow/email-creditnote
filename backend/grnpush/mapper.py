@@ -22,6 +22,7 @@ class BillGroup(BaseModel):
     facilities: list[str]
     vendor_code: str        # purchaseOrder.vendorCode
     vendor_name: str        # purchaseOrder.vendorName
+    vendor_gst: str = ""   # purchaseOrder GST (if Unicommerce provides it)
     date: Optional[str] = None          # GRN created date (epoch ms → YYYY-MM-DD)
     invoice_date: Optional[str] = None  # vendorInvoiceDate
     line_items: list[dict]
@@ -68,6 +69,7 @@ def group_grns(grns: list[tuple[dict, str]]) -> list[BillGroup]:
         po_code = ""
         vendor_code = ""
         vendor_name = ""
+        vendor_gst = ""
         dates: list[str | None] = []
         invoice_dates: list[str | None] = []
         gate_entries: list[str] = []
@@ -87,6 +89,15 @@ def group_grns(grns: list[tuple[dict, str]]) -> list[BillGroup]:
                 vendor_code = po.get("vendorCode", "")
             if not vendor_name:
                 vendor_name = po.get("vendorName", "")
+            if not vendor_gst:
+                vendor_gst = (
+                    po.get("vendorGstin")
+                    or po.get("vendorGstIn")
+                    or po.get("gstNo")
+                    or po.get("gstin")
+                    or po.get("gstNumber")
+                    or ""
+                )
 
             dates.append(_epoch_ms_to_date(grn.get("created")))
             invoice_dates.append(grn.get("vendorInvoiceDate"))
@@ -136,6 +147,7 @@ def group_grns(grns: list[tuple[dict, str]]) -> list[BillGroup]:
             facilities=facilities_seen,
             vendor_code=vendor_code,
             vendor_name=vendor_name,
+            vendor_gst=vendor_gst,
             date=date,
             invoice_date=invoice_date,
             line_items=merged_items,

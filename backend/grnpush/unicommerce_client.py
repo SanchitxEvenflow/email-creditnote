@@ -81,7 +81,6 @@ class UnicommerceClient:
             "createdBetween": {
                 "start": f"{start}T00:00:00.000Z",
                 "end": f"{end}T23:59:59.999Z",
-                "textRange": "TODAY",
             }
         }
         data = self._post(_GRN_LIST_PATH, body, facility)
